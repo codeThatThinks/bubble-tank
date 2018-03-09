@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<meta name="viewport" content="width=1024, minimum-scale=1, user-scalable=no" />
+	<style type="text/css">
+		body
+		{
+			overflow: hidden;
+		}
+
+		#wrapper
+		{
+			text-align: center;
+			clear: both;
+		}
+
+		.slider
+		{
+			border: 1px solid black;
+			width: 200px;
+			height: 200px;
+			overflow: visible;
+		}
+
+		.handle
+		{
+			position: relative;
+			background-color: rgba(0, 0, 0, 0.5);
+			width: 60px;
+			height: 60px;
+			border-radius: 30px;
+			left: 70px;
+			top: 70px;
+		}
+
+		#slider1Box
+		{
+			float: right;
+			margin-top: 50px;
+			margin-right: 30px;
+		}
+
+		#buttons
+		{
+			float: left;
+			margin-top: 10px;
+			margin-left: 10px;
+			text-align: center;
+		}
+
+		#buttons button
+		{
+			width: 90px;
+			height: 75px;
+			font-size: 14pt;
+			margin-bottom: 20px;
+		}
+
+		#camera
+		{
+			width: 550px;
+			display: inline-block;
+			text-align: center;
+			overflow: hidden;
+		}
+
+		#camera img
+		{
+			width: 100%;
+		}
+	</style>
+</head>
+<body>
+	<div id="wrapper">
+		<div id="camera">
+			<canvas id="camera-canvas" width="550" height="310"></canvas>
+		</div>
+		<div class="slider" id="slider1Box">
+			<div class="handle" id="slider1"></div>
+		</div>
+		<div id="buttons">
+			<button id="up" style="">&uarr;</button><br />
+			<button id="left">&larr;</button> <button id="right" style="margin-left: 20px;">&rarr;</button><br />
+			<button id="down" style="">&darr;</button><br /><br />
+			<button id="fire" style="width: 160px;">Fire!</button>
+		</div>
+		
+	</div>
+	
+	<script type="text/javascript" src="jquery.min.js"></script>
+	<script type="text/javascript"> 
+		function Slider(element, callback)
+		{
+			this.element = element
+			this.callback = callback;
+			this.x = 100;
+			this.y = 100;
+			this.mousedownX;
+			this.mousedownY;
+			this.isPressed = false;
+
+			this.move = function()
+			{
+				var stdx, stdy;
+
+				// x-axis
+				if(this.x >= 0 && this.x <= 200)
+				{
+					this.element.css("left", this.x - 30);
+					stdx = this.x;
+				}
+				else if(this.x < 0)
+				{
+					this.element.css("left", -30);
+					stdx = 0;
+				}
+				else if(this.x > 200)
+				{
+					this.element.css("left", 170);
+					stdx = 200;
+				}
+
+				// y-axis
+				if(this.y >= 0 && this.y <= 200)
+				{
+					this.element.css("top", this.y - 30);
+					stdy = this.y;
+				}
+				else if(this.y < 0)
+				{
+					this.element.css("top", -30);
+					stdy = 0;
+				}
+				else if(this.y > 200)
+				{
+					this.element.css("top", 170);
+					stdy = 200;
+				}
+
+				callback(stdx - 100, stdy - 100);
+			}
+		}
+
+		var slider1 = new Slider($('#slider1'), readJoystick);
+		var mousedownX, mousedownY;
+		var isFiring = false;
+		var websocket;
+		var previousX = 300, previousY = 300;
+		var upPressed = false, downPressed = false, leftPressed = false, rightPressed = false;
+		var buttonTimeout = 250;
+
+		function readJoystick(x, y)
+		{
+			// x is left/right movement
+			// y is forward/reverse movement
+			if(x >= 15)
+			{
+				var newX = Math.floor(x * 255 / 1000) * 10;
+				if(previousX != newX)
+				{
+					console.log("L" + newX + ";");
+					websocket.send("L" + newX + ";");
+					previousX = newX;
+				}
+			}
+			else if(x <= -15)
+			{
+				var newX = Math.floor(Math.abs(x) * 255 / 1000) * 10;
+				if(previousX != -newX)
+				{
+					console.log("R" + newX + ";");
+					websocket.send("R" + newX + ";");
+					previousX = -newX;
+				}
+			}
+			else
+			{
+				if(previousX != 0)
+				{
+					console.log("L0;");
+					websocket.send("L0;");
+					previousX = 0;
+				}
+			}
+
+			if(y >= 15)
+			{
+				var newY = Math.floor(y * 255 / 1000) * 10;
+				if(previousY != newY)
+				{
+					console.log("V" + newY + ";");
+					websocket.send("V" + newY + ";");
+					previousY = newY;
+				}
+			}
+			else if(y <= -15)
+			{
+				var newY = Math.floor(Math.abs(y) * 255 / 1000) * 10;
+				if(previousY != -newY)
+				{
+					console.log("F" + newY + ";");
+					websocket.send("F" + newY + ";");
+					previousY = -newY;
+				}
+			}
+			else
+			{
+				if(previousY != 0)
+				{
+					console.log("F0;");
+					websocket.send("F0;");
+					previousY = 0;
+				}
+			}
+		}
+
+		function sendLeft()
+		{
+			console.log("E;");
+			websocket.send("E;");
+
+			if(leftPressed)
+			{
+				setTimeout(sendLeft, buttonTimeout);
+			}
+		}
+
+		function sendRight()
+		{
+			console.log("I;");
+			websocket.send("I;");
+
+			if(rightPressed)
+			{
+				setTimeout(sendRight, buttonTimeout);
+			}
+		}
+
+		function sendUp()
+		{
+			console.log("U;");
+			websocket.send("U;");
+
+			if(upPressed)
+			{
+				setTimeout(sendUp, buttonTimeout);
+			}
+		}
+
+		function sendDown()
+		{
+			console.log("D;");
+			websocket.send("D;");
+
+			if(downPressed)
+			{
+				setTimeout(sendDown, buttonTimeout);
+			}
+		}
+
+		function drawWebcam()
+		{
+			/*var img = new Image();
+			$(img).attr({src: "10.0.1.1/camera.jpg"});
+		    $(img).load(function() {
+	            var canvas = $('#camera-canvas')[0];
+	            var context = canvas.getContext('2d');
+
+	            canvas.width = this.naturalWidth;
+	            canvas.height = this.naturalHeight;
+	            context.drawImage(this, 0, 0);
+	        });
+
+	        setTimeout(drawWebcam, 2000);*/
+		}
+
+		$(document).ready(function()
+		{
+			$('#slider1').bind("mousedown", function(e)
+			{
+				slider1.isPressed = true;
+				mousedownX = e.pageX;
+				mousedownY = e.pageY;
+				slider1.mousedownX = slider1.x;
+				slider1.mousedownY = slider1.y;
+				e.preventDefault();
+			});
+
+			$('#slider1').bind("touchstart", function(e)
+			{
+				var touches = e.changedTouches;
+				slider1.isPressed = true;
+				mousedownX = touches[0].pageX;
+				mousedownY = touches[0].pageY;
+				slider1.mousedownX = slider1.x;
+				slider1.mousedownY = slider1.y;
+			});
+
+			$(document).bind("mouseup", function(e)
+			{
+				if(slider1.isPressed)
+				{
+					slider1.isPressed = false;
+
+					slider1.x = 100;
+					slider1.y = 100;
+					slider1.move();
+				}
+
+				leftPressed = false;
+				rightPressed = false;
+				upPressed = false;
+				downPressed = false;
+			});
+
+			$(document).bind("touchend", function(e)
+			{
+				if(slider1.isPressed)
+				{
+					slider1.isPressed = false;
+
+					slider1.x = 100;
+					slider1.y = 100;
+					slider1.move();
+				}
+			});
+
+			$(document).mousemove(function(e)
+			{
+				if(slider1.isPressed)
+				{
+					var deltaX = e.pageX - mousedownX;
+					var deltaY = e.pageY - mousedownY;
+					slider1.x = slider1.mousedownX + deltaX;
+					slider1.y = slider1.mousedownY + deltaY;
+					slider1.move();
+				}
+			});
+
+			$(document.body).bind("touchmove", function(e)
+			{
+				if(slider1.isPressed)
+				{
+					var touches = e.changedTouches;
+					var deltaX = touches[0].pageX - mousedownX;
+					var deltaY = touches[0].pageY - mousedownY;
+					slider1.x = slider1.mousedownX + deltaX;
+					slider1.y = slider1.mousedownY + deltaY;
+					slider1.move();
+					$('#slider1Debug').text(slider1.x + ", " + slider1.y);
+				}
+			});
+
+			$('#fire').click(function()
+			{
+				isFiring = !isFiring;
+
+				if(isFiring)
+				{
+					console.log("+;");
+					websocket.send("+;");
+					$('#fire').text("Stop Firing");
+				}
+				else
+				{
+					console.log("-;");
+					websocket.send("-;");
+					$('#fire').text("Fire!");
+				}
+			});
+
+			$('#left').mousedown(function()
+			{
+				leftPressed = true;
+				console.log("E;");
+				websocket.send("E;");
+				setTimeout(sendLeft, buttonTimeout);
+			});
+
+			$('#right').mousedown(function()
+			{
+				rightPressed = true;
+				console.log("I;");
+				websocket.send("I;");
+				setTimeout(sendRight, buttonTimeout);
+			});
+
+			$('#up').mousedown(function()
+			{
+				upPressed = true;
+				console.log("U;");
+				websocket.send("U;");
+				setTimeout(sendUp, buttonTimeout);
+			});
+
+			$('#down').mousedown(function()
+			{
+				downPressed = true;
+				console.log("D;");
+				websocket.send("D;");
+				setTimeout(sendDown, buttonTimeout);
+			});
+
+			websocket = new WebSocket("ws://10.0.1.1/websocket");
+			setTimeout(drawWebcam, 2000);
+		});
+	</script>
+</body>
+</html>
